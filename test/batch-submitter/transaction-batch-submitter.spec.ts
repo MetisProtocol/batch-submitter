@@ -2,6 +2,7 @@ import { expect } from '../setup'
 
 /* External Imports */
 import { ethers } from '@nomiclabs/buidler'
+import ganache from 'ganache-core'
 import { Signer, ContractFactory, Contract } from 'ethers'
 import { getContractInterface } from '@eth-optimism/contracts'
 import { smockit, MockContract } from '@eth-optimism/smock'
@@ -297,4 +298,34 @@ describe('TransactionBatchSubmitter', () => {
     // it('should resubmit if tx hangs from low gas', async () => {
     // })
   })
+})
+
+// use describe.only to debug
+describe('TransactionBatchSubmitter to Ganache', () => {
+  const server = ganache.server({
+    // pass in no automine here
+  })
+
+  before(async () => {
+    // how ganache gets signers:
+    // https://github.com/ethereum-optimism/integration-tests/blob/5c14e59c3d62af7ebe89f02e830449a82e1bd8c9/packages/tx-ingestion/test/sequencer-batch-append.spec.ts#L25
+    // ganache.provider configured to talk to ganache.server
+    // use provider like this link:
+    // https://github.com/ethereum-optimism/integration-tests/blob/5c14e59c3d62af7ebe89f02e830449a82e1bd8c9/packages/tx-ingestion/test/batch-append.spec.ts
+    // can try to go directly to ganache.signer
+    // make sure signer only talks to localhost:3001
+
+    // transaction may not go through 
+    // may need 0 gas price transaction in beginning
+
+    // how to send tx:
+    // https://github.com/ethereum-optimism/integration-tests/blob/5c14e59c3d62af7ebe89f02e830449a82e1bd8c9/packages/x-domain/test/rpc.spec.ts#L37
+    await server.listen(3001)
+  })
+
+  after(async () => {
+    await server.close()
+  })
+
+  // only write test for getReceiptWithResubmission
 })
