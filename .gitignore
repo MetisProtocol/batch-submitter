@@ -2,6 +2,6 @@ build
 dist
 node_modules
 .env
-
+yarn.lock
 # vim
 *.swp

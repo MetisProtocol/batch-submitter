@@ -7,7 +7,7 @@ import {
 import { Promise as bPromise } from 'bluebird'
 import { Logger } from '@eth-optimism/core-utils'
 import { OptimismProvider } from '@eth-optimism/provider'
-import { getContractFactory } from '@eth-optimism/contracts'
+import { getContractFactory } from 'metiseth-optimism-contracts'
 
 /* Internal Imports */
 import { Address, Bytes32 } from '../coders'

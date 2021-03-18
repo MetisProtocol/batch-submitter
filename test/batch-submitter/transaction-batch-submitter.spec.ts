@@ -3,7 +3,7 @@ import { expect } from '../setup'
 /* External Imports */
 import { ethers } from '@nomiclabs/buidler'
 import { Signer, ContractFactory, Contract } from 'ethers'
-import { getContractInterface } from '@eth-optimism/contracts'
+import { getContractInterface } from 'metiseth-optimism-contracts'
 import { smockit, MockContract } from '@eth-optimism/smock'
 import { remove0x, getLogger } from '@eth-optimism/core-utils'
 

@@ -7,7 +7,7 @@ import {
 import {
   getContractInterface,
   getContractFactory,
-} from '@eth-optimism/contracts'
+} from 'metiseth-optimism-contracts'
 import { OptimismProvider } from '@eth-optimism/provider'
 import { Logger } from '@eth-optimism/core-utils'
 
