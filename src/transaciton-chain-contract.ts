@@ -12,6 +12,7 @@ export interface BatchContext {
 }
 
 export interface AppendSequencerBatchParams {
+  chainId: number // 32 bytes -- _chain_id
   shouldStartAtBatch: number // 5 bytes -- starts at batch
   totalElementsToAppend: number // 3 bytes -- total_elements_to_append
   contexts: BatchContext[] // total_elements[fixed_size[]]
@@ -20,7 +21,7 @@ export interface AppendSequencerBatchParams {
 
 /*
  * OVM_CanonicalTransactionChainContract is a wrapper around a normal Ethers contract
- * where the `appendSequencerBatch(...)` function uses a specialized encoding for improved efficiency.
+ * where the `appendSequencerBatchByChainId(...)` function uses a specialized encoding for improved efficiency.
  */
 export class CanonicalTransactionChainContract extends Contract {
   public async appendSequencerBatch(
@@ -34,7 +35,7 @@ export class CanonicalTransactionChainContract extends Contract {
  * Internal Functions *
  *********************/
 
-const APPEND_SEQUENCER_BATCH_METHOD_ID = 'appendSequencerBatch()'
+const APPEND_SEQUENCER_BATCH_METHOD_ID = 'appendSequencerBatchByChainId()'
 
 const appendSequencerBatch = async (
   OVM_CanonicalTransactionChain: Contract,
@@ -53,6 +54,7 @@ const appendSequencerBatch = async (
 export const encodeAppendSequencerBatch = (
   b: AppendSequencerBatchParams
 ): string => {
+  const encodeChainId = encodeHex(b.chainId, 64)
   const encodedShouldStartAtBatch = encodeHex(b.shouldStartAtBatch, 10)
   const encodedTotalElementsToAppend = encodeHex(b.totalElementsToAppend, 6)
 
@@ -71,6 +73,7 @@ export const encodeAppendSequencerBatch = (
     return acc + encodedTxDataHeader + remove0x(cur)
   }, '')
   return (
+    encodeChainId +
     encodedShouldStartAtBatch +
     encodedTotalElementsToAppend +
     encodedContexts +

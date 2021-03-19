@@ -98,12 +98,12 @@ export class StateBatchSubmitter extends BatchSubmitter {
   public async _getBatchStartAndEnd(): Promise<Range> {
     // TODO: Remove BLOCK_OFFSET by adding a tx to Geth's genesis
     const startBlock: number =
-      (await this.chainContract.getTotalElements()).toNumber() + BLOCK_OFFSET
+      (await this.chainContract.getTotalElementsByChainId(this.l2ChainId)).toNumber() + BLOCK_OFFSET
     // We will submit state roots for txs which have been in the tx chain for a while.
     const callBlockNumber: number =
       (await this.signer.provider.getBlockNumber()) - this.finalityConfirmations
     const totalElements: number =
-      (await this.ctcContract.getTotalElements()).toNumber() + BLOCK_OFFSET
+      (await this.ctcContract.getTotalElementsByChainId(this.l2ChainId)).toNumber() + BLOCK_OFFSET
     const endBlock: number = Math.min(
       startBlock + this.maxBatchSize,
       totalElements
@@ -131,8 +131,8 @@ export class StateBatchSubmitter extends BatchSubmitter {
   ): Promise<TransactionReceipt> {
     const batch = await this._generateStateCommitmentBatch(startBlock, endBlock)
     const tx = this.chainContract.interface.encodeFunctionData(
-      'appendStateBatch',
-      [batch, startBlock]
+      'appendStateBatchByChainId',
+      [this.l2ChainId, batch, startBlock]
     )
     if (!this._shouldSubmitBatch(tx.length * 2)) {
       return
@@ -141,7 +141,7 @@ export class StateBatchSubmitter extends BatchSubmitter {
     const offsetStartsAtIndex = startBlock - BLOCK_OFFSET // TODO: Remove BLOCK_OFFSET by adding a tx to Geth's genesis
     this.log.debug('Submitting batch. Tx:', tx)
     return this._submitAndLogTx(
-      this.chainContract.appendStateBatch(batch, offsetStartsAtIndex),
+      this.chainContract.appendStateBatchByChainId(this.l2ChainId, batch, offsetStartsAtIndex),
       'Submitted state root batch!'
     )
   }
@@ -169,12 +169,13 @@ export class StateBatchSubmitter extends BatchSubmitter {
       }
     }
     let tx = this.chainContract.interface.encodeFunctionData(
-      'appendStateBatch',
-      [batch, startBlock]
+      'appendStateBatchByChainId',
+      [this.l2ChainId, batch, startBlock]
     )
     while (tx.length > this.maxTxSize) {
       batch.splice(Math.ceil((batch.length * 2) / 3)) // Delete 1/3rd of all of the batch elements
-      tx = this.chainContract.interface.encodeFunctionData('appendStateBatch', [
+      tx = this.chainContract.interface.encodeFunctionData('appendStateBatchByChainId', [
+        this.l2ChainId,
         batch,
         startBlock,
       ])

@@ -112,7 +112,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
   }
 
   public async _onSync(): Promise<TransactionReceipt> {
-    const pendingQueueElements = await this.chainContract.getNumPendingQueueElements()
+    const pendingQueueElements = await this.chainContract.getNumPendingQueueElementsByChainId(this.l2ChainId)
 
     if (pendingQueueElements !== 0) {
       this.log.info(
@@ -120,9 +120,9 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
       )
 
       if (!this.disableQueueBatchAppend) {
-        // Empty the queue with a huge `appendQueueBatch(..)` call
+        // Empty the queue with a huge `appendQueueBatchByChainId(..)` call
         return this._submitAndLogTx(
-          this.chainContract.appendQueueBatch(99999999),
+          this.chainContract.appendQueueBatchByChainId(this.l2ChainId, 99999999),
           'Cleared queue!'
         )
       }
@@ -133,11 +133,12 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
 
   // TODO: Remove this function and use geth for lastL1BlockNumber!
   private async _updateLastL1BlockNumber() {
-    const pendingQueueElements = await this.chainContract.getNumPendingQueueElements()
+    const pendingQueueElements = await this.chainContract.getNumPendingQueueElementsByChainId(this.l2ChainId)
 
     if (pendingQueueElements !== 0) {
-      const nextQueueIndex = await this.chainContract.getNextQueueIndex()
-      const queueElement = await this.chainContract.getQueueElement(
+      const nextQueueIndex = await this.chainContract.getNextQueueIndexByChainId(this.l2ChainId)
+      const queueElement = await this.chainContract.getQueueElementByChainId(
+        this.l2ChainId,
         nextQueueIndex
       )
       this.lastL1BlockNumber = queueElement[2] // The block number is the 3rd element returned in the array....
@@ -159,7 +160,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
   public async _getBatchStartAndEnd(): Promise<Range> {
     // TODO: Remove BLOCK_OFFSET by adding a tx to Geth's genesis
     const startBlock =
-      (await this.chainContract.getTotalElements()).toNumber() + BLOCK_OFFSET
+      (await this.chainContract.getTotalElementsByChainId(this.l2ChainId)).toNumber() + BLOCK_OFFSET
     const endBlock =
       Math.min(
         startBlock + this.maxBatchSize,
@@ -316,6 +317,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
 
     return {
       // TODO: Remove BLOCK_OFFSET by adding a tx to Geth's genesis
+      chainId: this.l2ChainId,
       shouldStartAtBatch: shouldStartAtIndex - BLOCK_OFFSET,
       totalElementsToAppend,
       contexts,
