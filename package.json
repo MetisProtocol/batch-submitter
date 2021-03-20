@@ -39,7 +39,7 @@
     "chai": "^4.2.0",
     "dotenv": "^8.2.0",
     "ethers": "5.0.0",
-    "metiseth-optimism-contracts": "^1.0.1",
+    "metiseth-optimism-contracts": "^1.0.*",
     "rimraf": "^2.6.3"
   },
   "devDependencies": {
