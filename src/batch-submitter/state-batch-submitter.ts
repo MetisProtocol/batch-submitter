@@ -30,6 +30,7 @@ export class StateBatchSubmitter extends BatchSubmitter {
     resubmissionTimeout: number,
     finalityConfirmations: number,
     pullFromAddressManager: boolean,
+    addressManagerAddress: string,
     minBalanceEther: number,
     log: Logger,
     fraudSubmissionAddress: string
@@ -44,6 +45,7 @@ export class StateBatchSubmitter extends BatchSubmitter {
       numConfirmations,
       resubmissionTimeout,
       finalityConfirmations,
+      addressManagerAddress,
       pullFromAddressManager,
       minBalanceEther,
       log
@@ -64,7 +66,7 @@ export class StateBatchSubmitter extends BatchSubmitter {
       process.exit(1)
     }
     this.syncing = info.syncing
-    const addrs = await this._getChainAddresses(info)
+    const addrs = await this._getChainAddresses()
     const sccAddress = addrs.sccAddress
     const ctcAddress = addrs.ctcAddress
 

@@ -10,6 +10,7 @@ import {
 } from 'metiseth-optimism-contracts'
 import { OptimismProvider } from '@eth-optimism/provider'
 import { Logger } from '@eth-optimism/core-utils'
+import {inspect}from 'util'
 
 /* Internal Imports */
 import {
@@ -52,6 +53,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
     numConfirmations: number,
     resubmissionTimeout: number,
     pullFromAddressManager: boolean,
+    addressManagerAddress: string,
     minBalanceEther: number,
     log: Logger,
     disableQueueBatchAppend: boolean
@@ -66,6 +68,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
       numConfirmations,
       resubmissionTimeout,
       0,  // Supply dummy value because it is not used.
+      addressManagerAddress,
       pullFromAddressManager,
       minBalanceEther,
       log
@@ -79,6 +82,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
 
   public async _updateChainInfo(): Promise<void> {
     const info: RollupInfo = await this._getRollupInfo()
+    console.log(inspect(info))
     if (info.mode === 'verifier') {
       this.log.error(
         'Verifier mode enabled! Batch submitter only compatible with sequencer mode'
@@ -86,7 +90,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
       process.exit(1)
     }
     this.syncing = info.syncing
-    const addrs = await this._getChainAddresses(info)
+    const addrs = await this._getChainAddresses()
     const ctcAddress = addrs.ctcAddress
 
     if (

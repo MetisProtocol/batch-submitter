@@ -154,6 +154,7 @@ describe('TransactionBatchSubmitter', () => {
         1,
         100000,
         false,
+        "0x",
         1,
         getLogger(TX_BATCH_SUBMITTER_LOG_TAG),
         false
@@ -256,6 +257,7 @@ describe('TransactionBatchSubmitter', () => {
         1,
         100000,
         false,
+        "0x000",
         1,
         getLogger(TX_BATCH_SUBMITTER_LOG_TAG),
         false

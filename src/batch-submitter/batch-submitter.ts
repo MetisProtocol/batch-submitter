@@ -48,6 +48,7 @@ export abstract class BatchSubmitter {
     readonly numConfirmations: number,
     readonly resubmissionTimeout: number,
     readonly finalityConfirmations: number,
+    readonly addressManagerAddress: string,
     readonly pullFromAddressManager: boolean,
     readonly minBalanceEther: number,
     readonly log: Logger
@@ -61,10 +62,12 @@ export abstract class BatchSubmitter {
   public abstract async _getBatchStartAndEnd(): Promise<Range>
   public abstract async _updateChainInfo(): Promise<void>
 
+
+  public setChainId(chainId:number){
+    this.l2ChainId=chainId
+  }
+  
   public async submitNextBatch(): Promise<TransactionReceipt> {
-    if (typeof this.l2ChainId === 'undefined') {
-      this.l2ChainId = await this._getL2ChainId()
-    }
     await this._updateChainInfo()
     await this._checkBalance()
 
@@ -98,22 +101,13 @@ export abstract class BatchSubmitter {
     return this.l2Provider.send('rollup_getInfo', [])
   }
 
-  protected async _getL2ChainId(): Promise<number> {
-    return this.l2Provider.send('eth_chainId', [])
-  }
-
-  protected async _getChainAddresses(
-    info: RollupInfo
-  ): Promise<{ ctcAddress: string; sccAddress: string }> {
-    if (!this.pullFromAddressManager) {
-      return {
-        ctcAddress: info.addresses.canonicalTransactionChain,
-        sccAddress: info.addresses.stateCommitmentChain,
-      }
-    }
+   protected async _getChainAddresses(): Promise<{
+    ctcAddress: string
+    sccAddress: string
+  }> {
     const addressManager = (
       await getContractFactory('Lib_AddressManager', this.signer)
-    ).attach(info.addresses.addressResolver)
+    ).attach(this.addressManagerAddress)
     const sccAddress = await addressManager.getAddress(
       'OVM_StateCommitmentChain'
     )

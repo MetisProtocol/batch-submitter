@@ -54,6 +54,7 @@ interface RequiredEnvVars {
   // A boolean to clear the pending transactions in the mempool
   // on start up.
   CLEAR_PENDING_TXS: 'true' | 'false' | 'CLEAR_PENDING_TXS',
+  ADDRESS_MANAGER_ADDRESS:'ADDRESS_MANAGER_ADDRESS',
 }
 const requiredEnvVars: RequiredEnvVars = {
   L1_NODE_WEB3_URL: 'L1_NODE_WEB3_URL',
@@ -70,6 +71,7 @@ const requiredEnvVars: RequiredEnvVars = {
   RUN_STATE_BATCH_SUBMITTER: 'RUN_STATE_BATCH_SUBMITTER',
   SAFE_MINIMUM_ETHER_BALANCE: 'SAFE_MINIMUM_ETHER_BALANCE',
   CLEAR_PENDING_TXS: 'CLEAR_PENDING_TXS',
+  ADDRESS_MANAGER_ADDRESS:'ADDRESS_MANAGER_ADDRESS',
 }
 
 /* Optional Env Vars
@@ -120,7 +122,7 @@ export const run = async () => {
 
   const address = await sequencerSigner.getAddress()
   log.info(`Using sequencer address: ${address}`)
-
+  const chainId=await l2Provider.send('eth_chainId', [])
   const txBatchSubmitter = new TransactionBatchSubmitter(
     sequencerSigner,
     l2Provider,
@@ -131,10 +133,12 @@ export const run = async () => {
     parseInt(requiredEnvVars.NUM_CONFIRMATIONS, 10),
     parseInt(requiredEnvVars.RESUBMISSION_TIMEOUT, 10) * 1_000,
     true,
+    requiredEnvVars.ADDRESS_MANAGER_ADDRESS,
     parseFloat(requiredEnvVars.SAFE_MINIMUM_ETHER_BALANCE),
     getLogger(TX_BATCH_SUBMITTER_LOG_TAG),
     DISABLE_QUEUE_BATCH_APPEND
   )
+  txBatchSubmitter.setChainId(chainId)
 
   const stateBatchSubmitter = new StateBatchSubmitter(
     sequencerSigner,
@@ -147,10 +151,12 @@ export const run = async () => {
     parseInt(requiredEnvVars.RESUBMISSION_TIMEOUT, 10) * 1_000,
     parseInt(requiredEnvVars.FINALITY_CONFIRMATIONS, 10),
     true,
+    requiredEnvVars.ADDRESS_MANAGER_ADDRESS,
     parseFloat(requiredEnvVars.SAFE_MINIMUM_ETHER_BALANCE),
     getLogger(STATE_BATCH_SUBMITTER_LOG_TAG),
     FRAUD_SUBMISSION_ADDRESS
   )
+  stateBatchSubmitter.setChainId(chainId)
 
   // Loops infinitely!
   const loop = async (
