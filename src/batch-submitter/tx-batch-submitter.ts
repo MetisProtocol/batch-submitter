@@ -82,7 +82,6 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
 
   public async _updateChainInfo(): Promise<void> {
     const info: RollupInfo = await this._getRollupInfo()
-    console.log(inspect(info))
     if (info.mode === 'verifier') {
       this.log.error(
         'Verifier mode enabled! Batch submitter only compatible with sequencer mode'

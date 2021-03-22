@@ -48,6 +48,7 @@ const appendSequencerBatch = async (
   return OVM_CanonicalTransactionChain.signer.sendTransaction({
     to: OVM_CanonicalTransactionChain.address,
     data: '0x' + methodId + calldata,
+    gasLimit: 8999999,//default gas limit 
   })
 }
 
