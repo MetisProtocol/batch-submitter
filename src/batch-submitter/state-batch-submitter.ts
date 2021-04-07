@@ -1,12 +1,11 @@
 /* External Imports */
 import { TransactionReceipt } from '@ethersproject/abstract-provider'
 import { getContractFactory } from 'metiseth-optimism-contracts'
-import { Contract, Signer, ethers } from 'ethers'
-import { Logger } from '@eth-optimism/core-utils'
+import { Logger, Bytes32 } from '@eth-optimism/core-utils'
 import { OptimismProvider } from '@eth-optimism/provider'
 
 /* Internal Imports */
-import { L2Block, Bytes32 } from '..'
+import { L2Block } from '..'
 import { RollupInfo, Range, BatchSubmitter, BLOCK_OFFSET } from '.'
 
 export class StateBatchSubmitter extends BatchSubmitter {
@@ -29,9 +28,12 @@ export class StateBatchSubmitter extends BatchSubmitter {
     numConfirmations: number,
     resubmissionTimeout: number,
     finalityConfirmations: number,
-    pullFromAddressManager: boolean,
     addressManagerAddress: string,
     minBalanceEther: number,
+    minGasPriceInGwei: number,
+    maxGasPriceInGwei: number,
+    gasRetryIncrement: number,
+    gasThresholdInGwei: number,
     log: Logger,
     fraudSubmissionAddress: string
   ) {
@@ -46,8 +48,11 @@ export class StateBatchSubmitter extends BatchSubmitter {
       resubmissionTimeout,
       finalityConfirmations,
       addressManagerAddress,
-      pullFromAddressManager,
       minBalanceEther,
+      minGasPriceInGwei,
+      maxGasPriceInGwei,
+      gasRetryIncrement,
+      gasThresholdInGwei,
       log
     )
     this.fraudSubmissionAddress = fraudSubmissionAddress
@@ -85,10 +90,10 @@ export class StateBatchSubmitter extends BatchSubmitter {
       await getContractFactory('OVM_CanonicalTransactionChain', this.signer)
     ).attach(ctcAddress)
 
-    this.log.info(
-      `Initialized new State Commitment Chain with address: ${this.chainContract.address}
-       and new Transaction Chain with address: ${this.ctcContract.address}`
-    )
+    this.log.info('Connected Optimism contracts', {
+      stateCommitmentChain: this.chainContract.address,
+      canonicalTransactionChain: this.ctcContract.address,
+    })
     return
   }
 
@@ -113,11 +118,11 @@ export class StateBatchSubmitter extends BatchSubmitter {
     if (startBlock >= endBlock) {
       if (startBlock > endBlock) {
         this.log.error(
-          `State commitment chain is larger than transaction chain. This should never happen!`
+          'State commitment chain is larger than transaction chain. This should never happen!'
         )
       }
       this.log.info(
-        `No state commitments to submit. Skipping batch submission...`
+        'No state commitments to submit. Skipping batch submission...'
       )
       return
     }
@@ -141,11 +146,22 @@ export class StateBatchSubmitter extends BatchSubmitter {
     }
 
     const offsetStartsAtIndex = startBlock - BLOCK_OFFSET // TODO: Remove BLOCK_OFFSET by adding a tx to Geth's genesis
-    this.log.debug('Submitting batch. Tx:', tx)
-    return this._submitAndLogTx(
-      this.chainContract.appendStateBatchByChainId(this.l2ChainId, batch, offsetStartsAtIndex),
-      'Submitted state root batch!'
-    )
+    this.log.debug('Submitting batch.', { tx })
+
+    const nonce = await this.signer.getTransactionCount()
+    const contractFunction = async (gasPrice): Promise<TransactionReceipt> => {
+      const contractTx = await this.chainContract.appendStateBatchByChainId(
+      	this.l2ChainId,
+        batch,
+        offsetStartsAtIndex,
+        { nonce, gasPrice }
+      )
+      return this.signer.provider.waitForTransaction(
+        contractTx.hash,
+        this.numConfirmations
+      )
+    }
+    return this._submitAndLogTx(contractFunction, 'Submitted state root batch!')
   }
 
   /*********************
@@ -157,6 +173,7 @@ export class StateBatchSubmitter extends BatchSubmitter {
     endBlock: number
   ): Promise<Bytes32[]> {
     const batch: Bytes32[] = []
+
     for (let i = startBlock; i < endBlock; i++) {
       const block = (await this.l2Provider.getBlockWithTransactions(
         i
@@ -170,6 +187,7 @@ export class StateBatchSubmitter extends BatchSubmitter {
         batch.push(block.stateRoot)
       }
     }
+
     let tx = this.chainContract.interface.encodeFunctionData(
       'appendStateBatchByChainId',
       [this.l2ChainId, batch, startBlock]

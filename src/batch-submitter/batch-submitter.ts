@@ -1,34 +1,32 @@
 /* External Imports */
 import { Contract, Signer, utils } from 'ethers'
-import {
-  TransactionResponse,
-  TransactionReceipt,
-} from '@ethersproject/abstract-provider'
-import { Promise as bPromise } from 'bluebird'
-import { Logger } from '@eth-optimism/core-utils'
+import { TransactionReceipt } from '@ethersproject/abstract-provider'
+import * as ynatm from '@eth-optimism/ynatm'
+import { Address, Bytes32, Logger } from '@eth-optimism/core-utils'
 import { OptimismProvider } from '@eth-optimism/provider'
 import { getContractFactory } from 'metiseth-optimism-contracts'
 
-/* Internal Imports */
-import { Address, Bytes32 } from '../coders'
-
 export interface RollupInfo {
-  signer: Address
   mode: 'sequencer' | 'verifier'
   syncing: boolean
-  l1BlockHash: Bytes32
-  l1BlockHeight: number
-  addresses: {
-    canonicalTransactionChain: Address
-    stateCommitmentChain: Address
-    addressResolver: Address
-    l1ToL2TransactionQueue: Address
-    sequencerDecompression: Address
+  ethContext: {
+    blockNumber: number
+    timestamp: number
+  }
+  rollupContext: {
+    index: number
+    queueIndex: number
   }
 }
 export interface Range {
   start: number
   end: number
+}
+export interface ResubmissionConfig {
+  resubmissionTimeout: number
+  minGasPriceInGwei: number
+  maxGasPriceInGwei: number
+  gasRetryIncrement: number
 }
 
 export abstract class BatchSubmitter {
@@ -49,8 +47,11 @@ export abstract class BatchSubmitter {
     readonly resubmissionTimeout: number,
     readonly finalityConfirmations: number,
     readonly addressManagerAddress: string,
-    readonly pullFromAddressManager: boolean,
     readonly minBalanceEther: number,
+    readonly minGasPriceInGwei: number,
+    readonly maxGasPriceInGwei: number,
+    readonly gasRetryIncrement: number,
+    readonly gasThresholdInGwei: number,
     readonly log: Logger
   ) {}
 
@@ -62,12 +63,10 @@ export abstract class BatchSubmitter {
   public abstract async _getBatchStartAndEnd(): Promise<Range>
   public abstract async _updateChainInfo(): Promise<void>
 
-
-  public setChainId(chainId:number){
-    this.l2ChainId=chainId
-  }
-  
   public async submitNextBatch(): Promise<TransactionReceipt> {
+    if (typeof this.l2ChainId === 'undefined') {
+      this.l2ChainId = await this._getL2ChainId()
+    }
     await this._updateChainInfo()
     await this._checkBalance()
 
@@ -91,9 +90,16 @@ export abstract class BatchSubmitter {
     const ether = utils.formatEther(balance)
     const num = parseFloat(ether)
 
-    this.log.info(`Balance ${address}: ${ether} ether`)
+    this.log.info('Checked balance', {
+      address,
+      ether,
+    })
+
     if (num < this.minBalanceEther) {
-      this.log.error(`Current balance of ${num} lower than min safe balance of ${this.minBalanceEther}`)
+      this.log.warn('Current balance lower than min safe balance', {
+        current: num,
+        safeBalance: this.minBalanceEther,
+      })
     }
   }
 
@@ -101,7 +107,11 @@ export abstract class BatchSubmitter {
     return this.l2Provider.send('rollup_getInfo', [])
   }
 
-   protected async _getChainAddresses(): Promise<{
+  protected async _getL2ChainId(): Promise<number> {
+    return this.l2Provider.send('eth_chainId', [])
+  }
+
+  protected async _getChainAddresses(): Promise<{
     ctcAddress: string
     sccAddress: string
   }> {
@@ -120,82 +130,102 @@ export abstract class BatchSubmitter {
     }
   }
 
-  protected _shouldSubmitBatch(
-    batchSizeInBytes: number
-  ): boolean {
-    const isTimeoutReached = this.lastBatchSubmissionTimestamp + this.maxBatchSubmissionTime <= Date.now()
+  protected _shouldSubmitBatch(batchSizeInBytes: number): boolean {
+    const currentTimestamp = Date.now()
+    const isTimeoutReached =
+      this.lastBatchSubmissionTimestamp + this.maxBatchSubmissionTime <=
+      currentTimestamp
     if (batchSizeInBytes < this.minTxSize) {
       if (!isTimeoutReached) {
-        this.log.info(`Batch is too small & max submission timeout not reached. Skipping batch submission...`)
+        this.log.info(
+          'Skipping batch submission. Batch too small & max submission timeout not reached.',
+          {
+            batchSizeInBytes,
+            minTxSize: this.minTxSize,
+            lastBatchSubmissionTimestamp: this.lastBatchSubmissionTimestamp,
+            currentTimestamp,
+          }
+        )
         return false
       }
-      this.log.info(`Timeout reached.`)
+      this.log.info('Timeout reached, proceeding with batch submission.', {
+        batchSizeInBytes,
+        lastBatchSubmissionTimestamp: this.lastBatchSubmissionTimestamp,
+        currentTimestamp,
+      })
+      return true
     }
+    this.log.info('Sufficient batch size, proceeding with batch submission.', {
+      batchSizeInBytes,
+      lastBatchSubmissionTimestamp: this.lastBatchSubmissionTimestamp,
+      currentTimestamp,
+    })
     return true
   }
 
   public static async getReceiptWithResubmission(
-    response: TransactionResponse,
-    receiptPromises: Array<Promise<TransactionReceipt>>,
-    signer: Signer,
-    numConfirmations: number,
-    resubmissionTimeout: number,
-    log: Logger,
+    txFunc: (gasPrice) => Promise<TransactionReceipt>,
+    resubmissionConfig: ResubmissionConfig,
+    log: Logger
   ): Promise<TransactionReceipt> {
-    const receiptPromise = response.wait(numConfirmations)
-    receiptPromises.push(receiptPromise)
-    // Wait for the tx & if it takes too long resubmit
-    const sleepAndReturnResubmit = async (timeout: number) => {
-      await new Promise((r) => setTimeout(r, timeout))
-      return 'resubmit'
-    }
-    const promises = [...receiptPromises, sleepAndReturnResubmit(
-      resubmissionTimeout
-    )]
-    const val = await bPromise.any(promises)
+    const {
+      resubmissionTimeout,
+      minGasPriceInGwei,
+      maxGasPriceInGwei,
+      gasRetryIncrement,
+    } = resubmissionConfig
 
-    if (val === 'resubmit') {
-      log.debug(`Tx resubmission timeout reached for hash: ${response.hash}; nonce: ${response.nonce}.
-                Resubmitting tx...`)
-      const tx = {
-        to: response.to,
-        data: response.data,
-        nonce: response.nonce,
-        value: response.value,
-        gasLimit: response.gasLimit,
-      }
-      const newRes = await signer.sendTransaction(tx)
-      log.debug('Resubmission tx response:', newRes)
-      return BatchSubmitter.getReceiptWithResubmission(
-        newRes,
-        receiptPromises,
-        signer,
-        numConfirmations,
-        resubmissionTimeout,
-        log
-      )
-    } else {
-      return val
+    const receipt = await ynatm.send({
+      sendTransactionFunction: txFunc,
+      minGasPrice: ynatm.toGwei(minGasPriceInGwei),
+      maxGasPrice: ynatm.toGwei(maxGasPriceInGwei),
+      gasPriceScalingFunction: ynatm.LINEAR(gasRetryIncrement),
+      delay: resubmissionTimeout,
+    })
+
+    log.debug('Resubmission tx receipt', { receipt })
+
+    return receipt
+  }
+
+  private async _getMinGasPriceInGwei(): Promise<number> {
+    if (this.minGasPriceInGwei !== 0) {
+      return this.minGasPriceInGwei
     }
+    let minGasPriceInGwei = parseInt(
+      utils.formatUnits(await this.signer.getGasPrice(), 'gwei'),
+      10
+    )
+    if (minGasPriceInGwei > this.maxGasPriceInGwei) {
+      this.log.warn(
+        'Minimum gas price is higher than max! Ethereum must be congested...'
+      )
+      minGasPriceInGwei = this.maxGasPriceInGwei
+    }
+    return minGasPriceInGwei
   }
 
   protected async _submitAndLogTx(
-    txPromise: Promise<TransactionResponse>,
+    txFunc: (gasPrice) => Promise<TransactionReceipt>,
     successMessage: string
   ): Promise<TransactionReceipt> {
-    const response = await txPromise
     this.lastBatchSubmissionTimestamp = Date.now()
-    this.log.debug('Transaction response:', response)
     this.log.debug('Waiting for receipt...')
+
+    const resubmissionConfig: ResubmissionConfig = {
+      resubmissionTimeout: this.resubmissionTimeout,
+      minGasPriceInGwei: await this._getMinGasPriceInGwei(),
+      maxGasPriceInGwei: this.maxGasPriceInGwei,
+      gasRetryIncrement: this.gasRetryIncrement,
+    }
+
     const receipt = await BatchSubmitter.getReceiptWithResubmission(
-      response,
-      [],
-      this.signer,
-      this.numConfirmations,
-      this.resubmissionTimeout,
+      txFunc,
+      resubmissionConfig,
       this.log
     )
-    this.log.debug('Transaction receipt:', receipt)
+
+    this.log.debug('Transaction receipt:', { receipt })
     this.log.info(successMessage)
     return receipt
   }
