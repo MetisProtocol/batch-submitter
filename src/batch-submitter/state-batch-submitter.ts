@@ -1,4 +1,5 @@
 /* External Imports */
+import { Contract, Signer } from 'ethers'
 import { TransactionReceipt } from '@ethersproject/abstract-provider'
 import { getContractFactory } from 'metiseth-optimism-contracts'
 import { Logger, Bytes32 } from '@eth-optimism/core-utils'

@@ -9,7 +9,6 @@ import {
   getContractInterface,
   getContractFactory,
 } from 'metiseth-optimism-contracts'
-import { getContractInterface as getNewContractInterface } from 'new-contracts'
 import { OptimismProvider } from '@eth-optimism/provider'
 import {
   Logger,
@@ -528,7 +527,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
   }> {
     const manager = new Contract(
       this.addressManagerAddress,
-      getNewContractInterface('Lib_AddressManager'),
+      getContractInterface('Lib_AddressManager'),
       this.signer.provider
     )
 
@@ -537,7 +536,7 @@ export class TransactionBatchSubmitter extends BatchSubmitter {
     )
     const container = new Contract(
       addr,
-      getNewContractInterface('iOVM_ChainStorageContainer'),
+      getContractInterface('iOVM_ChainStorageContainer'),
       this.signer.provider
     )
 

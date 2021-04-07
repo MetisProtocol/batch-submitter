@@ -7,10 +7,18 @@ import {
 import { keccak256 } from 'ethers/lib/utils'
 import { remove0x, encodeHex } from './utils'
 import {
-  AppendSequencerBatchParams,
+  //AppendSequencerBatchParams,
   BatchContext,
   encodeAppendSequencerBatch,
 } from '@eth-optimism/core-utils'
+
+interface AppendSequencerBatchParams {
+    chainId: number;
+    shouldStartAtElement: number;
+    totalElementsToAppend: number;
+    contexts: BatchContext[];
+    transactions: string[];
+}
 
 export { encodeAppendSequencerBatch, BatchContext, AppendSequencerBatchParams }
 
