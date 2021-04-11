@@ -1,3 +1,6 @@
+/*
+  update by guanjie,jeff xiao,diana shi
+*/
 /* External Imports */
 import { Contract, BigNumber } from 'ethers'
 import {
@@ -49,7 +52,9 @@ const appendSequencerBatch = async (
   const methodId = keccak256(
     Buffer.from(APPEND_SEQUENCER_BATCH_METHOD_ID)
   ).slice(2, 10)
-  const calldata = encodeAppendSequencerBatch(batch)
+  var calldata = encodeAppendSequencerBatch(batch)
+  //add chain id parameter before original batch
+  calldata=encodeHex(batch.chainId, 64)+calldata
   return OVM_CanonicalTransactionChain.signer.sendTransaction({
     to: OVM_CanonicalTransactionChain.address,
     data: '0x' + methodId + calldata,
